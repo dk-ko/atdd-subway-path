@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 
 @Embeddable
 public class Sections {
-    public static final int MINIMUM_SIZE = 1;
+    public static final int INVALID_FIRST_SECTION_ERROR = 1;
 
 
     @OneToMany(mappedBy = "line", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, orphanRemoval = true)
@@ -75,42 +75,35 @@ public class Sections {
     }
 
     public void deleteSection(Station station) {
-        if (sections.size() <= MINIMUM_SIZE) {
+        if (sections.size() <= INVALID_FIRST_SECTION_ERROR) {
             throw new IllegalArgumentException("구간이 하나인 노선은 삭제할 수 없습니다.");
         }
 
         final Optional<Section> sectionFromUpStation = this.getSectionFromUpStation(station);
         final Optional<Section> sectionFromDownStation = this.getSectionFromDownStation(station);
 
-        if (removeIfFirstSection(sectionFromUpStation)) {
-            return;
-        }
-
-        if (removeIfLastSection(sectionFromDownStation)) {
-            return;
-        }
-
-        final Section middleSectionFromDownStation = this.getSectionFromDownStation(station).get();
-        sectionFromUpStation.get().updateUpStation(sectionFromDownStation.get().getUpStation());
-        sectionFromUpStation.get().addDistance(sectionFromDownStation.get().getDistance());
-        this.sections.remove(middleSectionFromDownStation);
-    }
-
-    private boolean removeIfLastSection(Optional<Section> sectionFromDownStation) {
-        if (sectionFromDownStation.isPresent() && this.isLastStationFrom(sectionFromDownStation.get())) {
-            this.sections.remove(sectionFromDownStation.get());
-            return true;
-        }
-        return false;
-    }
-
-    private boolean removeIfFirstSection(Optional<Section> sectionFromUpStation) {
         if (sectionFromUpStation.isPresent() && this.isFirstStationFrom(sectionFromUpStation.get())) {
             this.sections.remove(sectionFromUpStation.get());
-            return true;
+            return;
         }
-        return false;
+
+        if (sectionFromDownStation.isPresent() && this.isLastStationFrom(sectionFromDownStation.get())) {
+            this.sections.remove(sectionFromDownStation.get());
+            return;
+        }
+
+        final Section targetSection = this.getSectionFromDownStation(station)
+                .orElseThrow(() -> new IllegalArgumentException("section 을 찾을 수 없습니다."));
+        final Section previousSection = sectionFromUpStation
+                .orElseThrow(() -> new IllegalArgumentException("section 을 찾을 수 없습니다."));
+        final Section nextSection = sectionFromDownStation
+                .orElseThrow(() -> new IllegalArgumentException("section 을 찾을 수 없습니다."));
+
+        previousSection.updateUpStation(nextSection.getUpStation());
+        previousSection.addDistance(nextSection.getDistance());
+        this.sections.remove(targetSection);
     }
+
 
     public boolean isEmpty() {
         return this.sections.isEmpty();
